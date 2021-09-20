@@ -68,8 +68,7 @@ import {
     updateChildrenHook,
     allocateChildrenHook,
     markAsDynamicChildren,
-    hydrateElementChildrenHook,
-    hydrateNodeHook,
+    hydrateChildrenHook,
     hydrateElmHook,
 } from './hooks';
 import { isComponentConstructor } from './def';
@@ -122,7 +121,26 @@ const TextHook: Hooks<VText> = {
     insert: insertNodeHook,
     move: insertNodeHook, // same as insert for text nodes
     remove: removeNodeHook,
-    hydrate: hydrateNodeHook,
+    hydrate: (vNode: VNode, node: Node) => {
+        // @todo tests.
+        if (process.env.NODE_ENV !== 'production') {
+            if (node.nodeType !== Node.TEXT_NODE) {
+                logError('Hydration mismatch: incorrect node type received', vNode.owner);
+                assert.fail('Hydration mismatch: incorrect node type received.');
+            }
+
+            if (node.nodeValue !== vNode.text) {
+                logError(
+                    'Hydration mismatch: text values do not match, will recover from the difference',
+                    vNode.owner
+                );
+            }
+        }
+
+        // always set the text value to the one from the vnode.
+        node.nodeValue = vNode.text ?? null;
+        vNode.elm = node;
+    },
 };
 
 const CommentHook: Hooks<VComment> = {
@@ -138,7 +156,19 @@ const CommentHook: Hooks<VComment> = {
     insert: insertNodeHook,
     move: insertNodeHook, // same as insert for text nodes
     remove: removeNodeHook,
-    hydrate: hydrateNodeHook,
+    hydrate: (vNode: VNode, node: Node) => {
+        // @todo tests.
+        if (process.env.NODE_ENV !== 'production') {
+            if (node.nodeType !== Node.COMMENT_NODE) {
+                logError('Hydration mismatch: incorrect node type received', vNode.owner);
+                assert.fail('Hydration mismatch: incorrect node type received.');
+            }
+        }
+
+        // always set the text value to the one from the vnode.
+        node.nodeValue = vNode.text ?? null;
+        vNode.elm = node;
+    },
 };
 
 // insert is called after update, which is used somewhere else (via a module)
@@ -185,7 +215,7 @@ const ElementHook: Hooks<VElement> = {
         hydrateElmHook(vnode);
 
         // hydrate children hook
-        hydrateElementChildrenHook(vnode);
+        hydrateChildrenHook(vnode.elm.childNodes, vnode.children, vnode.owner);
     },
 };
 
@@ -293,7 +323,7 @@ const CustomElementHook: Hooks<VCustomElement> = {
             }
             runConnectedCallback(vm);
         }
-        hydrateElementChildrenHook(vnode);
+        hydrateChildrenHook(vnode.elm.childNodes, vnode.children, vm);
         if (vm) {
             hydrateVM(vm);
         }
